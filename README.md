@@ -1,8 +1,12 @@
-# Deployment counter · M1
+# Deployment counter · M2A
+
+[![CI](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml)
 
 A deliberately small React + TypeScript + Vite SPA for a DevOps portfolio. The counter has increment and reset controls; state lives in memory and resets on refresh. The production image builds with Node.js and serves static files with Nginx.
 
-This milestone provides only the application, tests, and container. AWS EKS, Terraform, Kubernetes, GitHub Actions, and Argo CD are future work.
+The M2A GitHub Actions workflow runs on pull requests and pushes to `main`. It installs the app dependencies with npm caching, then runs lint, tests, TypeScript checking, the production build, and a Docker image build. The workflow needs only read access to repository contents.
+
+This milestone provides only the application, tests, container, and CI validation. AWS EKS, ECR publishing, Terraform, Kubernetes, and Argo CD are future work.
 
 ## Layout
 
@@ -16,7 +20,7 @@ Makefile
 README.md
 ```
 
-The repository root is available for future `terraform/`, `kubernetes/`, `scripts/`, and `.github/` directories.
+The repository root is available for future `terraform/`, `kubernetes/`, and `scripts/` directories.
 
 ## Local development
 
@@ -24,7 +28,7 @@ Use Node.js 22.12+ (Node.js 22 is used in Docker), npm, and optionally Make. Doc
 
 ```sh
 cd app
-npm install
+npm ci
 npm run dev
 ```
 
@@ -69,11 +73,8 @@ docker inspect --format '{{.State.Health.Status}}' deployment-counter
 
 Stop the foreground container with Ctrl+C, or run `docker stop deployment-counter` in another terminal.
 
-## M1 validation in the implementation environment
+## GitHub Actions CI
 
-- Passed: all 3 component tests, TypeScript checking, and the production build.
-- Dependencies needed for tests and build were installed from the local npm cache. A full installation and lint remain unverified because registry DNS is unavailable and ESLint packages are not cached.
-- Docker build was attempted but blocked by permission denied on the Docker socket. Container startup, Nginx SPA fallback, and `/healthz` remain unverified.
-- Vite preview was attempted but the environment denied binding to `127.0.0.1:4173` (`EPERM`), so HTTP serving and a browser smoke test remain unverified. Component behavior was verified in jsdom.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and pushes to `main`. One job uses Node.js 22 and caches npm downloads using `app/package-lock.json`. It runs `npm ci`, ESLint, Vitest, TypeScript checks, and the production build from `app/`, then builds the production Docker image with `app/Dockerfile` and the `app/` build context.
 
-Run `make install` on a network-enabled machine to install all dependencies and generate `app/package-lock.json`, then commit that lockfile. A complete lockfile could not be generated here; install commands currently use `npm install`. Once generated, switch the Dockerfile and install commands to `npm ci` for reproducible installs, then run `make check` and the Docker checks above.
+Any failed step fails the job. The workflow grants only `contents: read` and does not publish the image. The badge above links to workflow runs. To reproduce the checks locally, run `cd app && npm ci`, then the validation commands above and the Docker build from the repository root.

@@ -4,7 +4,7 @@ PORT ?= 8080
 .PHONY: install dev lint test typecheck build preview check docker-build docker-run
 
 install:
-	npm --prefix app install
+	npm --prefix app ci
 dev:
 	npm --prefix app run dev
 lint:
