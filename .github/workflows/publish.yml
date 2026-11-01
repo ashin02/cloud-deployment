@@ -1,0 +1,55 @@
+name: Publish image
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-west-2
+      ECR_REPOSITORY: cloud-deployment
+      IMAGE_TAG: sha-${{ github.event.workflow_run.head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out the commit validated by CI
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Build production image
+        run: docker build --file app/Dockerfile --tag "$ECR_REPOSITORY:$IMAGE_TAG" app
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: us-west-2
+          role-session-name: publish-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push immutable image tag
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          image="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$image"
+          docker push "$image"
+          printf 'Published `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"

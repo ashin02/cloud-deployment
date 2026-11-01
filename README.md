@@ -1,4 +1,4 @@
-# Deployment counter · M2A
+# Deployment counter · M3
 
 [![CI](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml)
 
@@ -6,7 +6,7 @@ A deliberately small React + TypeScript + Vite SPA for a DevOps portfolio. The c
 
 The M2A GitHub Actions workflow runs on pull requests and pushes to `main`. It installs the app dependencies with npm caching, then runs lint, tests, TypeScript checking, the production build, and a Docker image build. The workflow needs only read access to repository contents.
 
-This milestone provides only the application, tests, container, and CI validation. AWS EKS, ECR publishing, Terraform, Kubernetes, and Argo CD are future work.
+M3 adds [Terraform-managed AWS infrastructure](terraform/README.md): a public-subnet VPC, private ECR repository, and a minimal EKS managed node group. See the guide for authentication, costs, validation, deployment verification, and teardown. Infrastructure apply and destroy require explicit approval.
 
 ## Layout
 
@@ -16,11 +16,12 @@ app/
   Dockerfile       # Node.js build → Nginx production
   nginx.conf       # Static serving, SPA fallback, health endpoint
   package.json
+terraform/         # VPC, ECR, EKS, IAM, and deployment/teardown guide
 Makefile
 README.md
 ```
 
-The repository root is available for future `terraform/`, `kubernetes/`, and `scripts/` directories.
+The repository root is available for future `kubernetes/` and `scripts/` directories.
 
 ## Local development
 
@@ -78,3 +79,7 @@ Stop the foreground container with Ctrl+C, or run `docker stop deployment-counte
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and pushes to `main`. One job uses Node.js 22 and caches npm downloads using `app/package-lock.json`. It runs `npm ci`, ESLint, Vitest, TypeScript checks, and the production build from `app/`, then builds the production Docker image with `app/Dockerfile` and the `app/` build context.
 
 Any failed step fails the job. The workflow grants only `contents: read` and does not publish the image. The badge above links to workflow runs. To reproduce the checks locally, run `cd app && npm ci`, then the validation commands above and the Docker build from the repository root.
+
+## ECR image publishing (M2B)
+
+After successful CI for a push to `main`, [Publish image](.github/workflows/publish.yml) builds the validated commit and pushes a unique immutable tag to the existing `cloud-deployment` ECR repository in `us-west-2`. Authentication uses a Terraform-managed GitHub OIDC role, with no static AWS credentials. See the [publishing setup and troubleshooting guide](terraform/PUBLISHING.md) for repository IDs, role configuration, approval requirements, and verification.

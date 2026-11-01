@@ -1,0 +1,13 @@
+region             = "us-east-1"
+project            = "cloud-deployment"
+admin_cidr         = "203.0.113.10/32" # Replace with YOUR public IPv4/32; example cannot provide access.
+admin_principal_arn     = "arn:aws:iam::123456789012:role/YourExistingAdminRole"
+kubernetes_version = "1.35"
+node_instance_type = "t3.medium"
+node_count         = 1
+# Alternatively: admin_principal_arn = "arn:aws:iam::123456789012:user/YourExistingAdminUser"
+
+# Obtain actual values with gh api repos/ashin02/cloud-deployment (owner.id and id).
+github_owner_id          = "123456" # Replace; not a username.
+github_repository_id     = "987654" # Replace; not the repository name.
+github_immutable_subject = true

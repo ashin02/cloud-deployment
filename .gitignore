@@ -14,3 +14,16 @@ dist/
 .env.*
 !.env.example
 *.log
+
+# Terraform local state, downloaded providers, plans, and private inputs
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+# Commit .terraform.lock.hcl after terraform init; it is not a secret.
