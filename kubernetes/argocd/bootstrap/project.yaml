@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloud-deployment
+spec:
+  description: Counter SPA in its own namespace
+  sourceRepos:
+    - git@github.com:ashin02/cloud-deployment.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: cloud-deployment
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service

@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloud-deployment
+spec:
+  project: cloud-deployment
+  source:
+    repoURL: git@github.com:ashin02/cloud-deployment.git
+    targetRevision: main
+    path: kubernetes/app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloud-deployment
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

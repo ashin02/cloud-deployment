@@ -83,3 +83,7 @@ Any failed step fails the job. The workflow grants only `contents: read` and doe
 ## ECR image publishing (M2B)
 
 After successful CI for a push to `main`, [Publish image](.github/workflows/publish.yml) builds the validated commit and pushes a unique immutable tag to the existing `cloud-deployment` ECR repository in `us-west-2`. Authentication uses a Terraform-managed GitHub OIDC role, with no static AWS credentials. See the [publishing setup and troubleshooting guide](terraform/PUBLISHING.md) for repository IDs, role configuration, approval requirements, and verification.
+
+## Kubernetes and Argo CD (M4A)
+
+[Kubernetes deployment and bootstrap guide](kubernetes/README.md) documents the one-replica counter SPA, a pinned non-HA Argo CD installation, private repository access, and localhost port-forwarding. Kustomize manifests live under `kubernetes/`. Bootstrap and live-cluster changes require explicit approval; image promotion remains manual until M4B.
