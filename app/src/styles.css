@@ -1,22 +1,55 @@
 :root {
   font-family: system-ui, sans-serif;
-  color: #172c36;
-  background: #f1f5f4;
+  color: #f0f1f3;
+  background: #17191d;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 280px; min-height: 100vh; display: grid; place-items: center; }
-main { width: min(560px, calc(100vw - 32px)); padding: clamp(24px, 6vw, 48px); background: white; border: 1px solid #d9e3df; border-radius: 20px; }
-h1 { font-size: clamp(1.8rem, 5vw, 2.5rem); line-height: 1.15; letter-spacing: -0.04em; }
-p { color: #53656a; line-height: 1.6; }
-.eyebrow { color: #20624c; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-output { display: block; margin: 24px 0; font-size: 5rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; }
-button { border: 1px solid #20624c; border-radius: 8px; padding: 12px 22px; font: inherit; font-weight: 600; background: #20624c; color: white; cursor: pointer; }
-button:hover { background: #174a39; }
-button.secondary { background: white; color: #20624c; }
-button.secondary:hover { background: #edf4f0; }
-button:focus-visible { outline: 3px solid #bf791d; outline-offset: 4px; }
-.note { margin-bottom: 0; font-size: 0.8rem; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+main {
+  width: min(400px, calc(100vw - 32px));
+  padding: clamp(24px, 6vw, 40px);
+  text-align: center;
+  background: #22252b;
+  border: 1px solid #353941;
+  border-radius: 16px;
+}
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+output {
+  display: block;
+  margin: 28px 0;
+  font-size: clamp(3.5rem, 15vw, 5rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+button {
+  border: 1px solid #718db5;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font: inherit;
+  font-weight: 600;
+  background: #a3bce0;
+  color: #172232;
+  cursor: pointer;
+}
+button:hover { background: #b6cbe8; }
+button.secondary { background: #2c3038; color: #f0f1f3; border-color: #464d59; }
+button.secondary:hover { background: #363c46; }
+button:focus-visible { outline: 3px solid #a3bce0; outline-offset: 4px; }
