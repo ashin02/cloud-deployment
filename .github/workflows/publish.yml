@@ -20,6 +20,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
     env:
       AWS_REGION: us-west-2
       ECR_REPOSITORY: cloud-deployment
@@ -46,10 +48,90 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Push immutable image tag
+        id: push
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           image="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$image"
           docker push "$image"
+          printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
           printf 'Published `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gitops-image-promotion-main
+      cancel-in-progress: false
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      PUBLISHED_IMAGE: ${{ needs.publish.outputs.image }}
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ github.token }}
+          persist-credentials: true
+
+      - name: Skip stale source commits
+        id: source
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$SOURCE_SHA" ]; then
+            echo 'Skipping promotion: main no longer matches the CI-validated commit.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'current=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update only the deployment image
+        if: steps.source.outputs.current == 'true'
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          image = os.environ['PUBLISHED_IMAGE']
+          source = os.environ['SOURCE_SHA']
+          expected = rf'[0-9]{{12}}\.dkr\.ecr\.us-west-2\.amazonaws\.com/cloud-deployment:sha-{re.escape(source)}-[0-9]+-[0-9]+'
+          if not re.fullmatch(expected, image):
+              raise SystemExit('Missing or unexpected immutable published image')
+          path = Path('kubernetes/app/deployment.yaml')
+          text = path.read_text()
+          # This manifest has one container. Fail closed if its structure changes.
+          pattern = r'(?m)^(\s*- name: counter\n\s+image: )\S+(\s*)$'
+          updated, count = re.subn(pattern, lambda m: m[1] + image + m[2], text)
+          if count != 1 or len(re.findall(r'(?m)^\s+image:', text)) != 1:
+              raise SystemExit('Expected exactly one counter image field')
+          path.write_text(updated)
+          PY
+
+      - name: Validate Kustomize rendering
+        if: steps.source.outputs.current == 'true'
+        run: |
+          kubectl kustomize kubernetes/app > "$RUNNER_TEMP/counter-rendered.yaml"
+          grep -F -- "image: $PUBLISHED_IMAGE" "$RUNNER_TEMP/counter-rendered.yaml"
+          git diff --check
+          test "$(git diff --name-only)" = 'kubernetes/app/deployment.yaml'
+
+      - name: Commit and push the image manifest
+        if: steps.source.outputs.current == 'true'
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$SOURCE_SHA" ]; then
+            echo 'Skipping promotion: main advanced during validation.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- kubernetes/app/deployment.yaml
+          test "$(git diff --cached --name-only)" = 'kubernetes/app/deployment.yaml'
+          git commit -m "chore(gitops): promote $PUBLISHED_IMAGE"
+          # Never force or rebase: a concurrent main update rejects this push.
+          # Repository rules must permit this GITHUB_TOKEN push; no bypass is used.
+          # GITHUB_TOKEN push events do not retrigger CI/publishing recursively.
+          git push origin HEAD:refs/heads/main
