@@ -115,5 +115,5 @@ The public lab endpoint is temporary; TLS and a custom domain are not configured
 - [M1–M6 roadmap, decisions, validation and remaining work](docs/ROADMAP.md)
 - [AWS infrastructure, authentication and Terraform inputs](terraform/README.md)
 - [ECR publishing, OIDC and image promotion](terraform/PUBLISHING.md)
-- [Kubernetes, Argo CD bootstrap and application operations](kubernetes/README.md)
+- [Kubernetes, Argo CD bootstrap and application operations](k8s/README.md)
 - [Complete AWS cleanup procedure](terraform/README.md#cost-and-complete-teardown)

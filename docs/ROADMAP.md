@@ -195,4 +195,4 @@ no live resource changes are part of documentation maintenance.
 - [Portfolio overview](../README.md)
 - [Infrastructure and complete cleanup](../terraform/README.md)
 - [Publishing and promotion](../terraform/PUBLISHING.md)
-- [Kubernetes bootstrap, verification and local development](../kubernetes/README.md)
+- [Kubernetes bootstrap, verification and local development](../k8s/README.md)

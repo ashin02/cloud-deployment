@@ -102,7 +102,7 @@ jobs:
           expected = rf'[0-9]{{12}}\.dkr\.ecr\.us-west-2\.amazonaws\.com/cloud-deployment:sha-{re.escape(source)}-[0-9]+-[0-9]+'
           if not re.fullmatch(expected, image):
               raise SystemExit('Missing or unexpected immutable published image')
-          path = Path('kubernetes/app/deployment.yaml')
+          path = Path('k8s/app/deployment.yaml')
           text = path.read_text()
           # This manifest has one container. Fail closed if its structure changes.
           pattern = r'(?m)^(\s*- name: counter\n\s+image: )\S+(\s*)$'
@@ -115,10 +115,10 @@ jobs:
       - name: Validate Kustomize rendering
         if: steps.source.outputs.current == 'true'
         run: |
-          kubectl kustomize kubernetes/app > "$RUNNER_TEMP/counter-rendered.yaml"
+          kubectl kustomize k8s/app > "$RUNNER_TEMP/counter-rendered.yaml"
           grep -F -- "image: $PUBLISHED_IMAGE" "$RUNNER_TEMP/counter-rendered.yaml"
           git diff --check
-          test "$(git diff --name-only)" = 'kubernetes/app/deployment.yaml'
+          test "$(git diff --name-only)" = 'k8s/app/deployment.yaml'
 
       - name: Commit and push the image manifest
         if: steps.source.outputs.current == 'true'
@@ -130,8 +130,8 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- kubernetes/app/deployment.yaml
-          test "$(git diff --cached --name-only)" = 'kubernetes/app/deployment.yaml'
+          git add -- k8s/app/deployment.yaml
+          test "$(git diff --cached --name-only)" = 'k8s/app/deployment.yaml'
           git commit -m "chore(gitops): promote $PUBLISHED_IMAGE"
           # Never force or rebase: a concurrent main update rejects this push.
           # Repository rules must permit this GITHUB_TOKEN push; no bypass is used.

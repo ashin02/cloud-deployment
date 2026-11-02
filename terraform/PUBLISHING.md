@@ -70,8 +70,8 @@ Images incur ECR storage costs and are retained until deliberately removed. The 
 
 ## Automatic image promotion (M4B)
 
-After a successful image push, the promotion job checks out the latest `main` using `GITHUB_TOKEN`. Only this job has `contents: write`; it has no AWS credentials or OIDC permission. It updates only `kubernetes/app/deployment.yaml` to the published URI, validates `kubectl kustomize kubernetes/app`, and commits that file alone.
+After a successful image push, the promotion job checks out the latest `main` using `GITHUB_TOKEN`. Only this job has `contents: write`; it has no AWS credentials or OIDC permission. It updates only `k8s/app/deployment.yaml` to the published URI, validates `kubectl kustomize k8s/app`, and commits that file alone.
 
 Promotion is serialized. Both the initial checkout and a pre-push fetch must match the CI-validated source SHA. If `main` advanced, the image remains published but promotion is skipped. A race after the final check causes a normal push rejection; the workflow never forces or rebases over newer changes. The token’s push does not recursively trigger the push-based CI flow. Repository rules must allow the bot push; no PAT or branch-rule bypass is added.
 
-Verify the promotion commit, its image URI, and Argo CD’s reported revision and health using [Kubernetes verification](../kubernetes/README.md#access-and-operational-verification). Published is not synonymous with deployed or healthy. A skipped stale run is expected; do not force its old image over newer Git state. During an operator rollback, coordinate/pause publishing so another source push does not supersede recovery. The workflow does not implement automatic rollback.
+Verify the promotion commit, its image URI, and Argo CD’s reported revision and health using [Kubernetes verification](../k8s/README.md#access-and-operational-verification). Published is not synonymous with deployed or healthy. A skipped stale run is expected; do not force its old image over newer Git state. During an operator rollback, coordinate/pause publishing so another source push does not supersede recovery. The workflow does not implement automatic rollback.

@@ -10,7 +10,7 @@ After a separately approved apply, `terraform output -raw load_balancer_controll
 
 This configuration creates a VPC (`10.42.0.0/16`), two public `/24` subnets in separate standard availability zones, an Internet Gateway and route table, private ECR, and a standard EKS cluster with one On-Demand `c7i-flex.large` managed worker by default. This is a short-lived experiment, not a highly available application platform.
 
-The verified lab also has a public NLB, created by AWS Load Balancer Controller from `kubernetes/app/service-public.yaml`, not by a Terraform load-balancer resource. There are no NAT Gateways, databases or application persistent volumes. The worker still needs a 20 GiB root EBS disk, which EKS deletes with the instance. Default EKS networking, DNS, and kube-proxy components provide basic cluster operation; Terraform manages the VPC CNI add-on to give it a separate IAM role.
+The verified lab also has a public NLB, created by AWS Load Balancer Controller from `k8s/app/service-public.yaml`, not by a Terraform load-balancer resource. There are no NAT Gateways, databases or application persistent volumes. The worker still needs a 20 GiB root EBS disk, which EKS deletes with the instance. Default EKS networking, DNS, and kube-proxy components provide basic cluster operation; Terraform manages the VPC CNI add-on to give it a separate IAM role.
 
 ## Prerequisites and authentication
 
@@ -97,7 +97,7 @@ aws eks describe-nodegroup --region "$REGION" --cluster-name "$CLUSTER" \
 terraform plan -input=false -var-file="$TF_INPUT_FILE" -var="region=$AWS_REGION"
 ```
 
-For an IAM user, use that user’s AWS profile and omit `--role-arn`. For a role you need to assume, append `--role-arn YOUR_IAM_ROLE_ARN` to `update-kubeconfig`; your current credentials must be permitted to assume it. If already authenticated as the configured role, omit that option. Never pass a user ARN to `--role-arn`. Expect one Ready node and healthy system pods. A timeout accessing the API usually warrants checking your current public IP against `admin_cidr`; an authorization failure warrants checking the IAM principal/access entry. The final plan should show no unexpected changes. Application and public NLB operations are documented in [the Kubernetes guide](../kubernetes/README.md).
+For an IAM user, use that user’s AWS profile and omit `--role-arn`. For a role you need to assume, append `--role-arn YOUR_IAM_ROLE_ARN` to `update-kubeconfig`; your current credentials must be permitted to assume it. If already authenticated as the configured role, omit that option. Never pass a user ARN to `--role-arn`. Expect one Ready node and healthy system pods. A timeout accessing the API usually warrants checking your current public IP against `admin_cidr`; an authorization failure warrants checking the IAM principal/access entry. The final plan should show no unexpected changes. Application and public NLB operations are documented in [the Kubernetes guide](../k8s/README.md).
 
 ## Cost considerations
 

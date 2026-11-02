@@ -28,9 +28,9 @@ The worker role must already have ECR pull permissions for the target repository
 Run from the repository root on a machine with access to GitHub:
 
 ```sh
-kubectl kustomize kubernetes/app > /tmp/counter-app.yaml
-kubectl kustomize kubernetes/argocd/bootstrap > /tmp/counter-bootstrap.yaml
-kubectl kustomize kubernetes/argocd/install > /tmp/argocd-install.yaml
+kubectl kustomize k8s/app > /tmp/counter-app.yaml
+kubectl kustomize k8s/argocd/bootstrap > /tmp/counter-bootstrap.yaml
+kubectl kustomize k8s/argocd/install > /tmp/argocd-install.yaml
 ```
 
 Inspect the rendered files before applying. The remote install URL is pinned to [v3.5.6](https://github.com/argoproj/argo-cd/releases/tag/v3.5.6), not `stable`. The app includes `counter-public`, an internet-facing NLB Service on port 80 with IP targets. `counter` and the Argo CD UI Service remain internal. No Ingress is configured. Standard Argo CD installation includes CRDs and cluster-wide controller RBAC, so review it as an administrator. The restricted AppProject only permits this source, destination namespace, and the three app resource kinds. It is an operational guardrail, not isolation against cluster administrators.
@@ -89,7 +89,7 @@ kubectl apply --dry-run=server -f /tmp/counter-bootstrap.yaml
 kubectl apply -f /tmp/counter-bootstrap.yaml
 ```
 
-The Application points only at `kubernetes/app`, so it cannot sync its own bootstrap files or credentials. The namespace is synced first via a negative sync wave. Automated sync, prune and self-heal are enabled. No deletion finalizer is set on the Application: deleting that object does not unexpectedly cascade-delete workloads. `allowEmpty: false` blocks automatically pruning the entire app when the source is empty; individual removed resources can still be pruned. Treat Git edits as deployment changes.
+The Application points only at `k8s/app`, so it cannot sync its own bootstrap files or credentials. The namespace is synced first via a negative sync wave. Automated sync, prune and self-heal are enabled. No deletion finalizer is set on the Application: deleting that object does not unexpectedly cascade-delete workloads. `allowEmpty: false` blocks automatically pruning the entire app when the source is empty; individual removed resources can still be pruned. Treat Git edits as deployment changes.
 
 ## Application readiness and reconciliation
 

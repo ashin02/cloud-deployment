@@ -7,7 +7,7 @@ spec:
   source:
     repoURL: git@github.com:ashin02/cloud-deployment.git
     targetRevision: main
-    path: kubernetes/app
+    path: k8s/app
   destination:
     server: https://kubernetes.default.svc
     namespace: cloud-deployment
