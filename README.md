@@ -14,18 +14,32 @@ it is not a highly available production architecture.
 
 ## Architecture
 
+
 ```mermaid
 flowchart LR
     Push[Push to main] --> CI[GitHub Actions CI]
     CI --> Build[Docker build and publish]
+
     Build --> ECR[Private ECR]
     Build --> Promotion[Guarded image promotion]
-    Promotion --> Git[Kubernetes manifest in Git]
+    Promotion --> Git[Kubernetes manifests in Git]
     Git --> Argo[Argo CD]
-    Argo --> App[EKS counter Deployment]
-    ECR --> App
-    Browser[Browser] --> NLB[Public NLB HTTP 80]
-    NLB --> App
+
+    subgraph EKS[AWS EKS Cluster]
+        Deployment[Kubernetes Deployment] --> Pod[Counter Pod - Nginx and React]
+        Service[counter-public Service]
+    end
+
+    Argo --> Deployment
+    Argo --> Service
+    ECR -.->|Image pull by kubelet| Pod
+
+    Service -.-> Controller[AWS Load Balancer Controller]
+    Controller -.->|Provisions| NLB[Public NLB - HTTP 80]
+
+    Browser[Browser] --> NLB
+    NLB -->|IP target traffic| Pod
+
     TF[Terraform] --> AWS[VPC, EKS, ECR and IAM]
 ```
 
