@@ -65,6 +65,8 @@ jobs:
       contents: write
     concurrency:
       group: gitops-image-promotion-main
+      # Retain pending promotions when older publishes finish out of order (up to 100).
+      queue: max
       cancel-in-progress: false
     env:
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}

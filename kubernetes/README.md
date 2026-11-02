@@ -1,12 +1,12 @@
-# M4A: counter SPA with Argo CD
+# Kubernetes deployment and operations
 
-The `app/` Kustomization owns only the `cloud-deployment` namespace, one counter Deployment and a ClusterIP Service. Argo CD watches that directory on `main`. The separate `argocd/bootstrap/` Kustomization contains the Application and a restricted AppProject; `argocd/install/` pins the upstream **v3.5.6** non-HA installation. Argo CD does not manage itself in this milestone.
+The `app/` Kustomization owns only the `cloud-deployment` namespace, one counter Deployment, a ClusterIP Service and a public NLB Service. Argo CD watches that directory on `main`. The separate `argocd/bootstrap/` Kustomization contains the Application and a restricted AppProject; `argocd/install/` pins the upstream **v3.5.6** non-HA installation. Argo CD does not manage itself in this milestone.
 
 ## Before bootstrap
 
 **Do not execute apply, repository registration, password changes, or the reconciliation test below until live-cluster changes are explicitly approved.** Creating the Application enables automated deployment immediately. Merge/push the reviewed manifests to `main` and configure read-only repository access before creating it.
 
-The Deployment references the verified published image `011951224228.dkr.ecr.us-west-2.amazonaws.com/cloud-deployment:sha-45348c8edbba5b414a9ded0fba909bd4396ebb85-41363422813-1`. The immutable tag is preserved; no `latest` tag is used. Image changes are manual Git changes for M4A; automatic promotion belongs to M4B.
+The Deployment pins an immutable ECR tag. The publishing workflow now promotes the exact image after successful CI, provided `main` still matches the validated source commit. Argo CD reconciles that Git change. Inspect `app/deployment.yaml` for the current URI rather than copying a historical tag from documentation. See [publishing and promotion](../terraform/PUBLISHING.md).
 
 Use the existing `cloud-deployment` EKS cluster in `us-west-2` and its current single `c7i-flex.large` worker. Terraform, CI, and the image are unchanged. Install kubectl compatible with the cluster version (within one minor version), and Argo CD CLI v3.5.6. Use an AWS profile with the configured EKS administrator access. Your public IP must match the cluster's API CIDR restriction.
 
@@ -33,7 +33,7 @@ kubectl kustomize kubernetes/argocd/bootstrap > /tmp/counter-bootstrap.yaml
 kubectl kustomize kubernetes/argocd/install > /tmp/argocd-install.yaml
 ```
 
-Inspect the rendered files before applying. The remote install URL is pinned to [v3.5.6](https://github.com/argoproj/argo-cd/releases/tag/v3.5.6), not `stable`. All Services remain internal; there are no Ingress or LoadBalancer resources. Standard Argo CD installation includes CRDs and cluster-wide controller RBAC, so review it as an administrator. The restricted AppProject only permits this source, destination namespace, and the three app resource kinds. It is an operational guardrail, not isolation against cluster administrators.
+Inspect the rendered files before applying. The remote install URL is pinned to [v3.5.6](https://github.com/argoproj/argo-cd/releases/tag/v3.5.6), not `stable`. The app includes `counter-public`, an internet-facing NLB Service on port 80 with IP targets. `counter` and the Argo CD UI Service remain internal. No Ingress is configured. Standard Argo CD installation includes CRDs and cluster-wide controller RBAC, so review it as an administrator. The restricted AppProject only permits this source, destination namespace, and the three app resource kinds. It is an operational guardrail, not isolation against cluster administrators.
 
 For schema validation, use kubeconform with Kubernetes schemas matching your actual server version for `/tmp/counter-app.yaml`. Validate Argo CD custom resources against the pinned CRDs, or use the server dry-run step below once CRDs are installed. Do not treat `-ignore-missing-schemas` as successful validation of Application/AppProject.
 
@@ -91,11 +91,11 @@ kubectl apply -f /tmp/counter-bootstrap.yaml
 
 The Application points only at `kubernetes/app`, so it cannot sync its own bootstrap files or credentials. The namespace is synced first via a negative sync wave. Automated sync, prune and self-heal are enabled. No deletion finalizer is set on the Application: deleting that object does not unexpectedly cascade-delete workloads. `allowEmpty: false` blocks automatically pruning the entire app when the source is empty; individual removed resources can still be pruned. Treat Git edits as deployment changes.
 
-## Verify readiness, health and reconciliation
+## Application readiness and reconciliation
 
 ```sh
-argocd app get cloud-deployment --refresh
-argocd app wait cloud-deployment --sync --health --timeout 300
+kubectl -n argocd wait application/cloud-deployment --for=jsonpath='{.status.sync.status}'=Synced --timeout=300s
+kubectl -n argocd wait application/cloud-deployment --for=jsonpath='{.status.health.status}'=Healthy --timeout=300s
 kubectl -n argocd get application cloud-deployment \
   -o jsonpath='{.status.sync.status}{" "}{.status.health.status}{" "}{.status.sync.revision}{"\n"}'
 kubectl -n cloud-deployment rollout status deployment/counter --timeout=300s
@@ -125,7 +125,7 @@ For an **approved** low-impact self-heal test, temporarily change the managed re
 ```sh
 kubectl -n cloud-deployment patch deployment counter --type merge \
   -p '{"spec":{"revisionHistoryLimit":3}}'
-argocd app get cloud-deployment --refresh
+kubectl -n argocd get application cloud-deployment
 kubectl -n cloud-deployment get deployment counter --watch \
   -o custom-columns=NAME:.metadata.name,HISTORY:.spec.revisionHistoryLimit
 ```
@@ -146,8 +146,109 @@ The non-HA Argo CD controller requests 100m / 256 MiB and is limited to 1 CPU / 
 
 ## Teardown (requires separate approval)
 
-Remove the Application first to stop reconciliation, then delete only the application namespace if you intend to remove the SPA. Revoke the GitHub deploy key. If this is the dedicated Argo CD lab installation, remove its reviewed install manifest and namespace only after checking no other applications use it. Do not delete Argo CD first and leave an untracked application running. No Terraform or EKS teardown is part of M4A.
+Follow [the complete AWS cleanup sequence](../terraform/README.md#cost-and-complete-teardown). Stop promotion and remove the Application before deleting `counter-public`. Keep AWS Load Balancer Controller and its IAM role available until AWS has removed the NLB, target groups and associated controller-owned resources. Only then remove the application namespace, dedicated controllers, and Terraform infrastructure. Revoke the GitHub deploy key. Do not remove finalizers to bypass cloud cleanup.
 
 ## Local validation results
 
-App and bootstrap Kustomizations render with kubectl's bundled Kustomize. The supplied, user-verified ECR image URI is pinned in the rendered Deployment, with no unresolved placeholders. The pinned Argo CD installation could not be fetched in the implementation environment because GitHub DNS/network access is blocked. Full Kubernetes schema and server-side validation, Git authentication, live image pulling, sync and readiness remain to be verified on an authorized connected machine. No live resources were applied or changed.
+App and bootstrap Kustomizations render with kubectl's bundled Kustomize. The supplied, user-verified ECR image URI is pinned in the rendered Deployment, with no unresolved placeholders. The pinned Argo CD installation could not be fetched in the implementation environment because GitHub DNS/network access is blocked. These are historical implementation-environment limitations, not the current lab status. The owner subsequently verified pod recovery, ErrImagePull failure handling, GitOps recovery and public HTTP 200. No captured timings or exhaustive schema-validation report is included. This documentation refactor made no live changes.
+
+## Access and operational verification
+
+Use the existing AWS profile for this lab (set `AWS_PROFILE` to that profile's name if it is not already exported). These verification commands require AWS CLI and kubectl; the Argo CD CLI is optional.
+
+```sh
+: "${AWS_PROFILE:?Set AWS_PROFILE to the existing lab AWS profile}"
+export AWS_PROFILE
+export AWS_REGION=us-west-2
+aws sts get-caller-identity --profile "$AWS_PROFILE" --region "$AWS_REGION"
+aws eks update-kubeconfig --profile "$AWS_PROFILE" --region "$AWS_REGION" --name cloud-deployment
+kubectl config current-context
+kubectl -n cloud-deployment get pods,svc
+kubectl -n cloud-deployment rollout status deployment/counter --timeout=300s
+kubectl -n argocd wait application/cloud-deployment \
+  --for=jsonpath='{.status.sync.status}'=Synced --timeout=300s
+kubectl -n argocd wait application/cloud-deployment \
+  --for=jsonpath='{.status.health.status}'=Healthy --timeout=300s
+kubectl -n argocd get application cloud-deployment \
+  -o jsonpath='{.status.sync.status}{" "}{.status.health.status}{" "}{.status.sync.revision}{"\n"}'
+```
+
+These commands observe Argo CD's normal reconciliation; they do not force a refresh or sync. Confirm the reported revision matches the intended manifest commit on `main`, since a previously reconciled revision can also report `Synced Healthy`. For errors, inspect `kubectl -n argocd describe application cloud-deployment`.
+
+Discover the current public endpoint rather than keeping a temporary AWS hostname in documentation:
+
+```sh
+NLB_HOST=$(kubectl -n cloud-deployment get service counter-public \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+test -n "$NLB_HOST"
+curl --fail -i "http://$NLB_HOST/healthz"
+curl --fail -o /dev/null -w '%{http_code}\n' "http://$NLB_HOST/"
+```
+
+Open `http://<the returned hostname>` in a browser. The Service exposes plain HTTP on port 80; TLS termination and a custom domain are not configured. The temporary lab endpoint is not a permanent hosted demo.
+
+For local tunnels, run each command in a separate terminal:
+
+```sh
+kubectl -n cloud-deployment port-forward --address 127.0.0.1 svc/counter 8080:80
+kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8081:443
+```
+
+Visit <http://localhost:8080> for the SPA and <https://localhost:8081> for Argo CD. Argo CD uses a self-signed certificate by default; follow the bootstrap guide for initial login and password rotation. The Argo CD UI is not exposed through the public NLB.
+
+
+## Local development
+
+Use Node.js 22.12+ (Node.js 22 is used in Docker), npm, and optionally Make. Docker commands require a running Docker daemon.
+
+```sh
+cd app
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. From the repository root, `make install` and `make dev` do the same thing.
+
+## Validation and production build
+
+```sh
+cd app
+npm run lint
+npm test
+npm run typecheck
+npm run build
+npm run preview
+```
+
+Vitest and React Testing Library cover the initial count, repeated increments, reset, and keyboard interaction. `npm run test:watch` enables watch mode. The build includes TypeScript checking and writes to `app/dist/`; preview serves it at <http://localhost:4173>.
+
+From the repository root, use `make lint`, `make test`, `make typecheck`, `make build`, or `make check` for lint, tests, and a type-checked production build.
+
+## Docker
+
+Run these commands from the repository root; **`app/` is the build context**:
+
+```sh
+docker build -t deployment-counter:local app
+docker run --rm --name deployment-counter -p 127.0.0.1:8080:80 deployment-counter:local
+```
+
+Alternatively, use `make docker-build` and `make docker-run`. Override the defaults with `IMAGE=my-counter:local` or `PORT=8081`.
+
+Open <http://localhost:8080>. In another terminal:
+
+```sh
+curl --fail http://localhost:8080/
+curl --fail -i http://localhost:8080/healthz
+curl --fail http://localhost:8080/example/deep/link
+docker inspect --format '{{.State.Health.Status}}' deployment-counter
+```
+
+`GET /healthz` returns HTTP 200 with `ok` as plain text. It checks Nginx availability, not JavaScript execution. Nginx falls back to `index.html` for SPA paths; missing assets return 404. The health endpoint exists in the production Nginx container, not the Vite development or preview servers. Docker checks it every 30 seconds.
+
+Stop the foreground container with Ctrl+C, or run `docker stop deployment-counter` in another terminal.
+
+
+## Public NLB prerequisite
+
+The running lab’s `counter-public` Service depends on an installed AWS Load Balancer Controller using the existing `kube-system/aws-load-balancer-controller` ServiceAccount with the Terraform IRSA role annotation. Terraform vendors the v3.6.2 IAM policy; it does not install the controller or pin a deployed Helm chart. Public subnets carry `kubernetes.io/role/elb = "1"`. Do not assume a clean cluster gets a working NLB from the Service alone. Verify the controller, its credentials, subnet discovery and security-group reconciliation before diagnosing the application.

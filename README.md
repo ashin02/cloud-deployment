@@ -1,89 +1,106 @@
-# Deployment counter · M3
+# Cloud Deployment — DevOps Portfolio
 
 [![CI](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/ashin02/cloud-deployment/actions/workflows/ci.yml)
+[![Publish image](https://github.com/ashin02/cloud-deployment/actions/workflows/publish.yml/badge.svg)](https://github.com/ashin02/cloud-deployment/actions/workflows/publish.yml)
 
-A deliberately small React + TypeScript + Vite SPA for a DevOps portfolio. The counter has increment and reset controls; state lives in memory and resets on refresh. The production image builds with Node.js and serves static files with Nginx.
+A deliberately small React counter backed by an AWS Kubernetes delivery platform.
+The project demonstrates infrastructure as code, immutable container publishing,
+GitOps deployment, failure diagnosis, and recovery through Git.
 
-The M2A GitHub Actions workflow runs on pull requests and pushes to `main`. It installs the app dependencies with npm caching, then runs lint, tests, TypeScript checking, the production build, and a Docker image build. The workflow needs only read access to repository contents.
+The verified lab runs in **us-west-2** on EKS with one **c7i-flex.large** worker
+and one application replica. A public Network Load Balancer serves the SPA over HTTP.
+This temporary lab prioritizes a clear delivery flow and controlled resource use;
+it is not a highly available production architecture.
 
-M3 adds [Terraform-managed AWS infrastructure](terraform/README.md): a public-subnet VPC, private ECR repository, and a minimal EKS managed node group. See the guide for authentication, costs, validation, deployment verification, and teardown. Infrastructure apply and destroy require explicit approval.
+## Architecture
 
-## Layout
-
-```text
-app/
-  src/             # Counter UI and component tests
-  Dockerfile       # Node.js build → Nginx production
-  nginx.conf       # Static serving, SPA fallback, health endpoint
-  package.json
-terraform/         # VPC, ECR, EKS, IAM, and deployment/teardown guide
-Makefile
-README.md
+```mermaid
+flowchart LR
+    Push[Push to main] --> CI[GitHub Actions CI]
+    CI --> Build[Docker build and publish]
+    Build --> ECR[Private ECR]
+    Build --> Promotion[Guarded image promotion]
+    Promotion --> Git[Kubernetes manifest in Git]
+    Git --> Argo[Argo CD]
+    Argo --> App[EKS counter Deployment]
+    ECR --> App
+    Browser[Browser] --> NLB[Public NLB HTTP 80]
+    NLB --> App
+    TF[Terraform] --> AWS[VPC, EKS, ECR and IAM]
 ```
 
-The repository root is available for future `kubernetes/` and `scripts/` directories.
+## Stack and responsibilities
 
-## Local development
+| Technology | Role |
+| --- | --- |
+| React, TypeScript, Vite | Minimal SPA with in-memory counter state |
+| Docker, Nginx | Multi-stage image, static serving, SPA fallback and `/healthz` |
+| GitHub Actions | CI checks, ECR publishing and Git manifest promotion |
+| Terraform | AWS networking, standard EKS managed nodes, ECR and IAM |
+| Kubernetes, Kustomize | Deployment, health probes, resource limits and Services |
+| Argo CD | Private-repository sync, pruning and drift correction |
+| AWS Load Balancer Controller, NLB | Public HTTP access using IP targets |
 
-Use Node.js 22.12+ (Node.js 22 is used in Docker), npm, and optionally Make. Docker commands require a running Docker daemon.
+## From commit to deployment
+
+1. Pull requests and pushes to `main` run lint, Vitest, TypeScript checks,
+   a production build and a Docker build.
+2. Successful CI for a same-repository push enables ECR publishing through OIDC.
+   The image tag records the validated commit, run ID and attempt; no `latest` is used.
+3. A separate job updates only the Deployment image in Git and validates Kustomize.
+   Serialized promotion, source-SHA checks and non-forced pushes reject stale updates.
+4. Argo CD reconciles the manifest; Kubernetes probes report workload readiness.
+   Publishing success alone does not prove deployment health.
+
+## Key engineering decisions
+
+- Two public subnets and public worker IPs avoid a NAT Gateway; security groups
+  and an administrator CIDR constrain access to the cluster API.
+- Standard managed EKS nodes, one app replica and non-HA Argo CD keep the lab small.
+- Dedicated IAM roles separate CNI, load-balancer control and image publishing.
+- OIDC replaces stored AWS keys; only promotion has Git write permission.
+- Argo CD reads the private repository through a read-only deploy key.
+- Immutable image references provide traceability and deliberate Git-based recovery.
+- State, plans, private inputs and credentials stay out of Git.
+
+## Verified reliability scenarios
+
+These manual results were reported as verified by the project owner.
+No timings, benchmarks or captured test logs are claimed.
+
+| Scenario | Verified result |
+| --- | --- |
+| Pod self-healing | Kubernetes restored the workload after pod removal |
+| Failed image deployment | An invalid image produced `ErrImagePull` |
+| GitOps rollback and recovery | Restoring the known-good image in Git recovered deployment |
+| Public NLB validation | The public endpoint returned HTTP 200 |
+
+Self-heal corrects drift to Git's desired state; it does not choose a healthy older
+image when Git contains a bad one. Rollback is an operator-driven Git change.
+There is no zero-downtime or automatic-rollback guarantee.
+
+## Try it locally
 
 ```sh
-cd app
-npm ci
-npm run dev
+make install
+make dev
+# In another terminal, run validation:
+make check
 ```
 
-Open <http://localhost:5173>. From the repository root, `make install` and `make dev` do the same thing.
+Open <http://localhost:5173>. See the Kubernetes guide for Docker commands,
+public endpoint discovery, local port-forwarding and Argo CD verification.
+The public lab endpoint is temporary; TLS and a custom domain are not configured.
 
-## Validation and production build
+## Documentation and operations
 
-```sh
-cd app
-npm run lint
-npm test
-npm run typecheck
-npm run build
-npm run preview
-```
+- [M1–M6 roadmap, decisions, validation and remaining work](docs/ROADMAP.md)
+- [AWS infrastructure, authentication and Terraform inputs](terraform/README.md)
+- [ECR publishing, OIDC and image promotion](terraform/PUBLISHING.md)
+- [Kubernetes, Argo CD bootstrap and application operations](kubernetes/README.md)
+- [Complete AWS cleanup procedure](terraform/README.md#cost-and-complete-teardown)
 
-Vitest and React Testing Library cover the initial count, repeated increments, reset, and keyboard interaction. `npm run test:watch` enables watch mode. The build includes TypeScript checking and writes to `app/dist/`; preview serves it at <http://localhost:4173>.
-
-From the repository root, use `make lint`, `make test`, `make typecheck`, `make build`, or `make check` for lint, tests, and a type-checked production build.
-
-## Docker
-
-Run these commands from the repository root; **`app/` is the build context**:
-
-```sh
-docker build -t deployment-counter:local app
-docker run --rm --name deployment-counter -p 127.0.0.1:8080:80 deployment-counter:local
-```
-
-Alternatively, use `make docker-build` and `make docker-run`. Override the defaults with `IMAGE=my-counter:local` or `PORT=8081`.
-
-Open <http://localhost:8080>. In another terminal:
-
-```sh
-curl --fail http://localhost:8080/
-curl --fail -i http://localhost:8080/healthz
-curl --fail http://localhost:8080/example/deep/link
-docker inspect --format '{{.State.Health.Status}}' deployment-counter
-```
-
-`GET /healthz` returns HTTP 200 with `ok` as plain text. It checks Nginx availability, not JavaScript execution. Nginx falls back to `index.html` for SPA paths; missing assets return 404. The health endpoint exists in the production Nginx container, not the Vite development or preview servers. Docker checks it every 30 seconds.
-
-Stop the foreground container with Ctrl+C, or run `docker stop deployment-counter` in another terminal.
-
-## GitHub Actions CI
-
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and pushes to `main`. One job uses Node.js 22 and caches npm downloads using `app/package-lock.json`. It runs `npm ci`, ESLint, Vitest, TypeScript checks, and the production build from `app/`, then builds the production Docker image with `app/Dockerfile` and the `app/` build context.
-
-Any failed step fails the job. The workflow grants only `contents: read` and does not publish the image. The badge above links to workflow runs. To reproduce the checks locally, run `cd app && npm ci`, then the validation commands above and the Docker build from the repository root.
-
-## ECR image publishing (M2B)
-
-After successful CI for a push to `main`, [Publish image](.github/workflows/publish.yml) builds the validated commit and pushes a unique immutable tag to the existing `cloud-deployment` ECR repository in `us-west-2`. Authentication uses a Terraform-managed GitHub OIDC role, with no static AWS credentials. See the [publishing setup and troubleshooting guide](terraform/PUBLISHING.md) for repository IDs, role configuration, approval requirements, and verification.
-
-## Kubernetes and Argo CD (M4A)
-
-[Kubernetes deployment and bootstrap guide](kubernetes/README.md) documents the one-replica counter SPA, a pinned non-HA Argo CD installation, private repository access, and localhost port-forwarding. Kustomize manifests live under `kubernetes/`. Bootstrap and live-cluster changes require explicit approval; image promotion remains manual until M4B.
+**Cleanup matters:** EKS, the worker, NLB, public IPs and storage incur charges while
+idle. Remove the public Service while its controller and IAM role still exist,
+then follow the approved teardown procedure with the original state and inputs.
+Closing port-forwards or deleting a pod does not stop AWS billing.

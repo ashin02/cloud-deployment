@@ -1,4 +1,4 @@
-# M2B: publish images after CI
+# Image publishing and GitOps promotion
 
 `.github/workflows/publish.yml` runs when `CI` completes on `main`, and its job proceeds only for successful **push** runs from this repository. PR runs, forks, failures and other branches do not publish. The workflow file must be present on the default branch. `main` is the default branch used by the existing CI configuration; update both workflows and the exact Terraform trust subject together if it changes.
 
@@ -8,7 +8,7 @@ The workflow checks out `workflow_run.head_sha`, builds `app/Dockerfile` with `a
 sha-<full validated commit SHA>-<publish run ID>-<publish run attempt>
 ```
 
-Retries get a different tag. There is no `latest` tag. The image reference appears in the workflow summary; the push log includes its digest. CI checks and the EKS infrastructure are unchanged. No application deployment is performed.
+Retries get a different tag. There is no `latest` tag. The image reference appears in the workflow summary; the push log includes its digest. CI checks and the EKS infrastructure are unchanged. A separate promotion job updates Git; Argo CD performs application reconciliation without direct cluster access from GitHub Actions.
 
 ## AWS and GitHub configuration
 
@@ -67,3 +67,11 @@ Use the exact tag from the workflow summary. AWS CloudTrail's `AssumeRoleWithWeb
 - **Terraform provider handshake failure:** validation in this environment could not start the installed AWS plugin. Run validation on a host that can execute Terraform provider plugins before applying.
 
 Images incur ECR storage costs and are retained until deliberately removed. The publishing role cannot delete them. Destroying this Terraform stack removes its publishing role and GitHub provider; it does not delete a repository that is only referenced by the data source. If the target is also the original managed `aws_ecr_repository.app`, that original resource's documented force-delete behavior still applies. Teardown requires explicit approval, including checking whether the account-wide OIDC provider is shared.
+
+## Automatic image promotion (M4B)
+
+After a successful image push, the promotion job checks out the latest `main` using `GITHUB_TOKEN`. Only this job has `contents: write`; it has no AWS credentials or OIDC permission. It updates only `kubernetes/app/deployment.yaml` to the published URI, validates `kubectl kustomize kubernetes/app`, and commits that file alone.
+
+Promotion is serialized. Both the initial checkout and a pre-push fetch must match the CI-validated source SHA. If `main` advanced, the image remains published but promotion is skipped. A race after the final check causes a normal push rejection; the workflow never forces or rebases over newer changes. The token’s push does not recursively trigger the push-based CI flow. Repository rules must allow the bot push; no PAT or branch-rule bypass is added.
+
+Verify the promotion commit, its image URI, and Argo CD’s reported revision and health using [Kubernetes verification](../kubernetes/README.md#access-and-operational-verification). Published is not synonymous with deployed or healthy. A skipped stale run is expected; do not force its old image over newer Git state. During an operator rollback, coordinate/pause publishing so another source push does not supersede recovery. The workflow does not implement automatic rollback.
