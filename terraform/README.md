@@ -1,5 +1,13 @@
 # M3: temporary EKS infrastructure
 
+## AWS Load Balancer Controller IAM
+
+`load_balancer_controller.tf` adds a dedicated IAM policy, IRSA role, and policy attachment. It reuses the existing EKS OIDC provider and permits only the subject `system:serviceaccount:kube-system:aws-load-balancer-controller`, with audience `sts.amazonaws.com`.
+
+The policy is vendored unchanged from the [official controller v3.6.2 policy](https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v3.6.2/docs/install/iam_policy.json) at `policies/aws-load-balancer-controller-v3.6.2.json`. Review and update the pinned policy deliberately when changing controller versions. No HTTP provider or download during planning is required.
+
+After a separately approved apply, `terraform output -raw load_balancer_controller_role_arn` gives the ARN for the future ServiceAccount annotation `eks.amazonaws.com/role-arn`. This configuration does not create a ServiceAccount, install Helm charts, or create a load balancer. Existing EKS, VPC, and node-group resources are unchanged.
+
 This configuration creates a VPC (`10.42.0.0/16`), two public `/24` subnets in separate standard availability zones, an Internet Gateway and route table, private ECR, and a standard EKS cluster with one On-Demand `t3.medium` managed worker by default. This is a short-lived experiment, not a highly available application platform.
 
 There are no NAT Gateways, load balancers, databases, application manifests, or persistent volumes. The worker still needs a 20 GiB root EBS disk, which EKS deletes with the instance. Default EKS networking, DNS, and kube-proxy components provide basic cluster operation; Terraform manages the VPC CNI add-on to give it a separate IAM role.
