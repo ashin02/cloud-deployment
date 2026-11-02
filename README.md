@@ -17,30 +17,34 @@ it is not a highly available production architecture.
 
 ```mermaid
 flowchart LR
-    Push[Push to main] --> CI[GitHub Actions CI]
-    CI --> Build[Docker build and publish]
+    Push["Push to main"] --> CI["GitHub Actions CI"]
+    CI --> Build["Docker build and publish"]
 
-    Build --> ECR[Private ECR]
-    Build --> Promotion[Guarded image promotion]
-    Promotion --> Git[Kubernetes manifests in Git]
-    Git --> Argo[Argo CD]
+    Build --> ECR["Private ECR"]
+    Build --> Promotion["Guarded image promotion"]
+    Promotion --> Git["Kubernetes manifests in Git"]
 
-    subgraph EKS[AWS EKS Cluster]
-        Deployment[Kubernetes Deployment] --> Pod[Counter Pod - Nginx and React]
-        Service[counter-public Service]
+    subgraph EKS["AWS EKS Cluster"]
+        Argo["Argo CD"]
+        Deployment["Kubernetes Deployment"]
+        Pod["Counter Pod - Nginx and React"]
+        Service["counter-public Service"]
+        Controller["AWS Load Balancer Controller"]
+
+        Argo --> Deployment
+        Argo --> Service
+        Deployment --> Pod
+        Service -.-> Controller
     end
 
-    Argo --> Deployment
-    Argo --> Service
-    ECR -.->|Image pull by kubelet| Pod
+    Git --> Argo
+    ECR -.->|"Image pull by kubelet"| Pod
 
-    Service -.-> Controller[AWS Load Balancer Controller]
-    Controller -.->|Provisions| NLB[Public NLB - HTTP 80]
+    Controller -.->|"Provisions"| NLB["Public NLB - HTTP 80"]
+    Browser["Browser"] --> NLB
+    NLB -->|"IP target traffic"| Pod
 
-    Browser[Browser] --> NLB
-    NLB -->|IP target traffic| Pod
-
-    TF[Terraform] --> AWS[VPC, EKS, ECR and IAM]
+    TF["Terraform"] --> AWS["VPC, EKS, ECR and IAM"]
 ```
 
 ## Stack and responsibilities
@@ -113,8 +117,3 @@ The public lab endpoint is temporary; TLS and a custom domain are not configured
 - [ECR publishing, OIDC and image promotion](terraform/PUBLISHING.md)
 - [Kubernetes, Argo CD bootstrap and application operations](kubernetes/README.md)
 - [Complete AWS cleanup procedure](terraform/README.md#cost-and-complete-teardown)
-
-**Cleanup matters:** EKS, the worker, NLB, public IPs and storage incur charges while
-idle. Remove the public Service while its controller and IAM role still exist,
-then follow the approved teardown procedure with the original state and inputs.
-Closing port-forwards or deleting a pod does not stop AWS billing.
