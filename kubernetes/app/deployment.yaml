@@ -23,7 +23,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: counter
-          image: 011951224228.dkr.ecr.us-west-2.amazonaws.com/cloud-deployment:sha-169e22d509e34a001c3cc082c86259a54de7e289-41375440849-1
+          image: 011951224228.dkr.ecr.us-west-2.amazonaws.com/cloud-deployment:sha-c710e06ba5ad66ae2d25c1bbce053b785c3e9ba7-41375973744-1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
